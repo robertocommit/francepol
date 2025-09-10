@@ -1,19 +1,25 @@
 @import 'tailwindcss';
 
-/* Modern CSS Variables */
+/* FRANCEPOL Brand CSS Variables */
 :root {
-  --primary: #3b82f6;
-  --primary-dark: #2563eb;
-  --secondary: #64748b;
+  --francepol-red: #dc2626;
+  --francepol-red-dark: #b91c1c;
+  --francepol-red-light: #fca5a5;
+  --francepol-gray: #374151;
+  --francepol-gray-dark: #1f2937;
+  --francepol-gray-light: #6b7280;
+  --primary: var(--francepol-red);
+  --primary-dark: var(--francepol-red-dark);
+  --secondary: var(--francepol-gray-light);
   --success: #10b981;
   --warning: #f59e0b;
   --danger: #ef4444;
-  --background: #f8fafc;
+  --background: #f9fafb;
   --surface: #ffffff;
-  --surface-hover: #f1f5f9;
-  --border: #e2e8f0;
-  --text-primary: #1e293b;
-  --text-secondary: #64748b;
+  --surface-hover: #f3f4f6;
+  --border: #e5e7eb;
+  --text-primary: var(--francepol-gray-dark);
+  --text-secondary: var(--francepol-gray-light);
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
@@ -74,7 +80,7 @@ body {
 }
 
 .btn-primary {
-  @apply bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500 shadow-sm hover:shadow-md;
+  @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 shadow-sm hover:shadow-md;
 }
 
 .btn-secondary {
@@ -171,17 +177,21 @@ body {
   @apply animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600;
 }
 
-/* Gradient backgrounds */
+/* FRANCEPOL Gradient backgrounds */
 .gradient-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
 }
 
 .gradient-success {
-  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
 }
 
 .gradient-warning {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.gradient-francepol {
+  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
 }
 
 /* Glass morphism effect */

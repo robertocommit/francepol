@@ -1,5 +1,7 @@
 <!-- src/routes/driver/[driver]/+page.svelte -->
 <script lang="ts">
+  import francepolLogo from '$lib/assets/francepol-logo.svg';
+  
   export let data: {
     driver: string;
     entries: { month: string; frachty: number; paliwo: number; razem: number; wynagr: number; wynik_mc: number; wynik_narast: number; }[];
@@ -32,9 +34,9 @@
   const performanceTrend = latestEntry ? latestEntry.wynik_narast - (firstEntry?.wynik_narast || 0) : 0;
 </script>
 
-<div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+<div class="min-h-screen bg-gradient-to-br from-red-50 via-white to-gray-50">
   <!-- Header -->
-  <header class="bg-white/80 backdrop-blur-md border-b border-gray-200 sticky top-0 z-50">
+  <header class="bg-white/90 backdrop-blur-md border-b border-red-200 sticky top-0 z-50 shadow-sm">
     <div class="max-w-7xl mx-auto px-6 py-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center space-x-4">
@@ -46,14 +48,10 @@
           </a>
           <div class="w-px h-8 bg-gray-300"></div>
           <div class="flex items-center space-x-3">
-            <div class="w-12 h-12 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center">
-              <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-              </svg>
-            </div>
+            <img src={francepolLogo} alt="FRANCEPOL" class="h-8 w-auto" />
             <div>
               <h1 class="text-2xl font-bold text-gray-900">{data.driver}</h1>
-              <p class="text-sm text-gray-600">Szczegóły finansowe kierowcy</p>
+              <p class="text-sm text-gray-600">FRANCEPOL - Szczegóły finansowe kierowcy</p>
             </div>
           </div>
         </div>
