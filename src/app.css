@@ -114,11 +114,81 @@ body {
 }
 
 .table-modern td {
-  @apply p-4 border-b border-gray-100;
+  @apply p-4 border-b border-gray-100 text-gray-900;
 }
 
 .table-modern tbody tr:hover {
   @apply bg-gray-50;
+}
+
+/* Enhanced table readability */
+.table-modern .font-mono {
+  @apply text-gray-900 font-semibold;
+}
+
+/* Ensure all table text is readable */
+.table-modern td {
+  color: #111827 !important; /* Dark gray for maximum readability */
+}
+
+.table-modern td.font-mono {
+  color: #111827 !important;
+  font-weight: 600;
+}
+
+/* Improve badge readability */
+.badge {
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* COMPREHENSIVE TEXT READABILITY FIX - ALL TEXT DARK AND READABLE */
+* {
+  color: #111827 !important; /* Force all text to be dark */
+}
+
+/* Override specific color classes to be readable */
+.text-gray-600,
+.text-gray-500,
+.text-gray-400,
+.text-gray-300 {
+  color: #374151 !important; /* Dark gray instead of light */
+}
+
+.text-blue-600,
+.text-blue-500 {
+  color: #1d4ed8 !important; /* Dark blue */
+}
+
+.text-green-600,
+.text-green-500 {
+  color: #059669 !important; /* Dark green */
+}
+
+.text-red-600,
+.text-red-500 {
+  color: #dc2626 !important; /* Dark red */
+}
+
+/* Ensure all spans, divs, and text elements are readable */
+span, div, p, a, label, input, select, button {
+  color: #111827 !important;
+}
+
+/* Driver names and all text in sidebar */
+.card a,
+.card span,
+.card div,
+.card label {
+  color: #111827 !important;
+}
+
+/* All font weights should be readable */
+.font-semibold,
+.font-bold,
+.font-medium {
+  color: #111827 !important;
+  font-weight: 600;
 }
 
 /* Input styles */
@@ -132,19 +202,19 @@ body {
 }
 
 .badge-success {
-  @apply bg-green-100 text-green-800;
+  @apply bg-green-100 text-green-900 font-semibold;
 }
 
 .badge-warning {
-  @apply bg-yellow-100 text-yellow-800;
+  @apply bg-yellow-100 text-yellow-900 font-semibold;
 }
 
 .badge-danger {
-  @apply bg-red-100 text-red-800;
+  @apply bg-red-100 text-red-900 font-semibold;
 }
 
 .badge-info {
-  @apply bg-blue-100 text-blue-800;
+  @apply bg-blue-100 text-blue-900 font-semibold;
 }
 
 /* Animation classes */
@@ -199,4 +269,32 @@ body {
   background: rgba(255, 255, 255, 0.25);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* FRANCEPOL specific styles */
+.francepol-header {
+  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+  color: white;
+}
+
+.francepol-accent {
+  border-left: 4px solid var(--francepol-red);
+  padding-left: 1rem;
+}
+
+.francepol-truck-icon {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+/* Transport-themed animations */
+@keyframes truckMove {
+  0% { transform: translateX(-10px); }
+  50% { transform: translateX(10px); }
+  100% { transform: translateX(-10px); }
+}
+
+.truck-animation {
+  animation: truckMove 3s ease-in-out infinite;
 }
