@@ -3,6 +3,6 @@ import type { PageServerLoad } from './$types';
 import { allEntries, listDrivers } from '$lib/db';
 
 export const load: PageServerLoad = async () => {
-  return { entries: allEntries(), drivers: listDrivers() };
+  return { entries: await allEntries(), drivers: await listDrivers() };
 };
 

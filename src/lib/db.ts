@@ -1,101 +1,140 @@
 // src/lib/db.ts
-import fs from 'node:fs';
-import path from 'node:path';
+import { browser } from '$app/environment';
+import Database from 'better-sqlite3';
+import fs from 'fs';
+import path from 'path';
 
-// Try to import better-sqlite3, but handle cases where it's not available
-let Database: any;
-try {
-  Database = require('better-sqlite3');
-} catch (error) {
-  console.warn('better-sqlite3 not available, using fallback');
-  Database = null;
-}
-
-const DB_DIR = path.resolve('.data');
-const DB_PATH = path.join(DB_DIR, 'transport.sqlite');
-
-// Lazy database initialization
-let db: any = null;
+let db = null;
 let isInitialized = false;
 
-function initializeDatabase(): any {
-  if (db && isInitialized) {
-    return db;
-  }
-
-  // Check if we're in a build environment or if better-sqlite3 is not available
-  const isBuildTime = process.env.NODE_ENV === 'production' && !process.env.RUNTIME;
-  const isSSRBuild = typeof window === 'undefined' && process.env.VITE_BUILD;
-  
-  if (isBuildTime || isSSRBuild || !Database) {
-    // During build time or if Database is not available, return null
-    console.log('Build time detected or Database not available, skipping database initialization');
-    return null;
-  }
-
-  try {
-    // Ensure directory exists
-    if (!fs.existsSync(DB_DIR)) {
-      fs.mkdirSync(DB_DIR, { recursive: true });
+export async function getDb() {
+    if (browser) {
+        throw new Error('Database operations are not available in the browser');
     }
 
-    db = new Database(DB_PATH);
-    console.log('Database initialized successfully');
-    
-    // Initialize schema
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS entries (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        driver TEXT NOT NULL,
-        month TEXT NOT NULL,               -- YYYY-MM-01
-        frachty REAL NOT NULL DEFAULT 0,   -- FRACHTY-fra
-        paliwo REAL NOT NULL DEFAULT 0,    -- PALIWO
-        razem REAL NOT NULL DEFAULT 0,     -- RAZEM
-        wynagr REAL NOT NULL DEFAULT 0,    -- WYNAGR.
-        wynik_mc REAL NOT NULL DEFAULT 0,  -- WYNIK mc
-        wynik_narast REAL NOT NULL DEFAULT 0 -- wynik narast.
-      );
+    if (!db) {
+        try {
+            console.log('Initializing FRANCEPOL database connection...');
+            
+            let dbPath;
+            
+            // Check if we're in production environment
+            const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL || process.env.RAILWAY_ENVIRONMENT;
+            
+            if (isProduction) {
+                dbPath = "/shared/volumes/a24e25/main.db";
+                // Check if the directory exists, if not create it
+                const dbDir = path.dirname(dbPath);
+                if (!fs.existsSync(dbDir)) {
+                    try {
+                        fs.mkdirSync(dbDir, { recursive: true });
+                        console.log(`Created directory: ${dbDir}`);
+                    } catch (dirError) {
+                        console.error(`Error creating directory ${dbDir}:`, dirError);
+                    }
+                }
+                
+                // Check if existing db file is corrupted or has schema issues
+                const dbFileExists = fs.existsSync(dbPath);
+                if (dbFileExists) {
+                    try {
+                        // Try to open and validate the database
+                        const testDb = new Database(dbPath);
+                        try {
+                            // Try to query the entries table to verify schema
+                            testDb.prepare('SELECT driver FROM entries LIMIT 1').get();
+                        } catch (schemaError) {
+                            console.warn('Schema validation failed, recreating database:', schemaError.message);
+                            testDb.close();
+                            fs.renameSync(dbPath, `${dbPath}.backup-${Date.now()}`);
+                            console.log('Renamed old database file to backup');
+                        }
+                        testDb.close();
+                    } catch (openError) {
+                        console.warn('Failed to open existing database, will recreate:', openError.message);
+                        try {
+                            fs.renameSync(dbPath, `${dbPath}.corrupt-${Date.now()}`);
+                            console.log('Renamed corrupted database file');
+                        } catch (renameError) {
+                            console.error('Error renaming corrupted database file:', renameError);
+                        }
+                    }
+                }
+                
+                db = new Database(dbPath);
+            } else {
+                dbPath = ".data/transport.sqlite";
+                // Ensure directory exists for development
+                const dbDir = path.dirname(dbPath);
+                if (!fs.existsSync(dbDir)) {
+                    fs.mkdirSync(dbDir, { recursive: true });
+                }
+                db = new Database(dbPath);
+            }
 
-      CREATE INDEX IF NOT EXISTS idx_entries_driver_month ON entries(driver, month);
-    `);
-    console.log('Database schema initialized successfully');
-    
-    isInitialized = true;
+            db.pragma('foreign_keys = ON');
+            
+            // Initialize schema
+            console.log('Setting up FRANCEPOL database schema...');
+            initializeSchema(db);
+            
+            // Import CSV data if available
+            try {
+                const { importCsvData } = await import('./import-csv');
+                console.log('Importing CSV data...');
+                await importCsvData(db);
+            } catch (error) {
+                console.error('Error importing CSV data (non-fatal):', error.message);
+            }
+            
+            // Verify entries table creation
+            try {
+                const entriesCount = db.prepare('SELECT COUNT(*) as count FROM entries').get();
+                console.log(`Entries table created successfully. Found ${entriesCount.count} entries.`);
+            } catch (error) {
+                console.error('Error verifying entries table:', error);
+            }
+            
+            isInitialized = true;
+            console.log('FRANCEPOL database initialization complete!');
+        } catch (error) {
+            console.error('Database initialization error:', error);
+            throw error;
+        }
+    }
     return db;
-  } catch (error) {
-    console.error('Failed to initialize database:', error);
-    // Fallback: try to create a new database
-    try {
-      db = new Database(':memory:'); // Use in-memory database as fallback
-      console.log('Using in-memory database as fallback');
-      
-      // Initialize schema for in-memory database
-      db.exec(`
+}
+
+export function closeDb() {
+    if (db) {
+        db.close();
+        db = null;
+        isInitialized = false;
+        console.log('Database connection closed');
+    }
+}
+
+export function isDbInitialized() {
+    return isInitialized;
+}
+
+function initializeSchema(database) {
+    database.exec(`
         CREATE TABLE IF NOT EXISTS entries (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          driver TEXT NOT NULL,
-          month TEXT NOT NULL,               -- YYYY-MM-01
-          frachty REAL NOT NULL DEFAULT 0,   -- FRACHTY-fra
-          paliwo REAL NOT NULL DEFAULT 0,    -- PALIWO
-          razem REAL NOT NULL DEFAULT 0,     -- RAZEM
-          wynagr REAL NOT NULL DEFAULT 0,    -- WYNAGR.
-          wynik_mc REAL NOT NULL DEFAULT 0,  -- WYNIK mc
-          wynik_narast REAL NOT NULL DEFAULT 0 -- wynik narast.
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            driver TEXT NOT NULL,
+            month TEXT NOT NULL,               -- YYYY-MM-01
+            frachty REAL NOT NULL DEFAULT 0,   -- FRACHTY-fra
+            paliwo REAL NOT NULL DEFAULT 0,    -- PALIWO
+            razem REAL NOT NULL DEFAULT 0,     -- RAZEM
+            wynagr REAL NOT NULL DEFAULT 0,    -- WYNAGR.
+            wynik_mc REAL NOT NULL DEFAULT 0,  -- WYNIK mc
+            wynik_narast REAL NOT NULL DEFAULT 0 -- wynik narast.
         );
 
         CREATE INDEX IF NOT EXISTS idx_entries_driver_month ON entries(driver, month);
-      `);
-      
-      isInitialized = true;
-      return db;
-    } catch (fallbackError) {
-      console.error('Failed to create fallback database:', fallbackError);
-      throw new Error('Database initialization failed');
-    }
-  }
+    `);
 }
-
-export { initializeDatabase as db };
 
 
 export type Entry = {
@@ -110,10 +149,9 @@ export type Entry = {
   wynik_narast: number;
 };
 
-export function listDrivers(): string[] {
+export async function listDrivers(): Promise<string[]> {
   try {
-    const database = initializeDatabase();
-    if (!database) return [];
+    const database = await getDb();
     const rows = database.prepare(`SELECT DISTINCT driver FROM entries ORDER BY driver`).all();
     return rows.map((r: any) => r.driver);
   } catch (error) {
@@ -122,10 +160,9 @@ export function listDrivers(): string[] {
   }
 }
 
-export function allEntries(): Entry[] {
+export async function allEntries(): Promise<Entry[]> {
   try {
-    const database = initializeDatabase();
-    if (!database) return [];
+    const database = await getDb();
     return database.prepare(`SELECT * FROM entries ORDER BY month, driver`).all() as Entry[];
   } catch (error) {
     console.error('Error fetching all entries:', error);
@@ -133,10 +170,9 @@ export function allEntries(): Entry[] {
   }
 }
 
-export function entriesByDriver(driver: string): Entry[] {
+export async function entriesByDriver(driver: string): Promise<Entry[]> {
   try {
-    const database = initializeDatabase();
-    if (!database) return [];
+    const database = await getDb();
     return database.prepare(`SELECT * FROM entries WHERE driver = ? ORDER BY month`).all(driver) as Entry[];
   } catch (error) {
     console.error('Error fetching entries for driver:', driver, error);
@@ -144,11 +180,10 @@ export function entriesByDriver(driver: string): Entry[] {
   }
 }
 
-export function monthlyTotalsForDrivers(drivers: string[]): Entry[] {
+export async function monthlyTotalsForDrivers(drivers: string[]): Promise<Entry[]> {
   if (drivers.length === 0) return [];
   try {
-    const database = initializeDatabase();
-    if (!database) return [];
+    const database = await getDb();
     const placeholders = drivers.map(() => '?').join(',');
     const sql = `
       SELECT

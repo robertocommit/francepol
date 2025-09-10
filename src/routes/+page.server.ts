@@ -4,9 +4,9 @@ import { listDrivers, monthlyTotalsForDrivers } from '$lib/db';
 
 export const load: PageServerLoad = async ({ url }) => {
   const selected = url.searchParams.getAll('driver');
-  const drivers = listDrivers();
+  const drivers = await listDrivers();
   const selectedDrivers = selected.length ? selected : drivers.slice(0, Math.min(5, drivers.length));
-  const totals = monthlyTotalsForDrivers(selectedDrivers);
+  const totals = await monthlyTotalsForDrivers(selectedDrivers);
   return { drivers, selectedDrivers, totals };
 };
 

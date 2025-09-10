@@ -4,7 +4,7 @@ import { entriesByDriver } from '$lib/db';
 
 export const load: PageServerLoad = async ({ params }) => {
   const driver = decodeURIComponent(params.driver);
-  const entries = entriesByDriver(driver);
+  const entries = await entriesByDriver(driver);
   return { driver, entries };
 };
 
