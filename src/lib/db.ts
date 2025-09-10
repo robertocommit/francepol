@@ -1,60 +1,102 @@
 // src/lib/db.ts
-import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
+
+// Try to import better-sqlite3, but handle cases where it's not available
+let Database: any;
+try {
+  Database = require('better-sqlite3');
+} catch (error) {
+  console.warn('better-sqlite3 not available, using fallback');
+  Database = null;
+}
 
 const DB_DIR = path.resolve('.data');
 const DB_PATH = path.join(DB_DIR, 'transport.sqlite');
 
-// Ensure directory exists
-if (!fs.existsSync(DB_DIR)) {
+// Lazy database initialization
+let db: any = null;
+let isInitialized = false;
+
+function initializeDatabase(): any {
+  if (db && isInitialized) {
+    return db;
+  }
+
+  // Check if we're in a build environment or if better-sqlite3 is not available
+  const isBuildTime = process.env.NODE_ENV === 'production' && !process.env.RUNTIME;
+  const isSSRBuild = typeof window === 'undefined' && process.env.VITE_BUILD;
+  
+  if (isBuildTime || isSSRBuild || !Database) {
+    // During build time or if Database is not available, return null
+    console.log('Build time detected or Database not available, skipping database initialization');
+    return null;
+  }
+
   try {
-    fs.mkdirSync(DB_DIR, { recursive: true });
+    // Ensure directory exists
+    if (!fs.existsSync(DB_DIR)) {
+      fs.mkdirSync(DB_DIR, { recursive: true });
+    }
+
+    db = new Database(DB_PATH);
+    console.log('Database initialized successfully');
+    
+    // Initialize schema
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        driver TEXT NOT NULL,
+        month TEXT NOT NULL,               -- YYYY-MM-01
+        frachty REAL NOT NULL DEFAULT 0,   -- FRACHTY-fra
+        paliwo REAL NOT NULL DEFAULT 0,    -- PALIWO
+        razem REAL NOT NULL DEFAULT 0,     -- RAZEM
+        wynagr REAL NOT NULL DEFAULT 0,    -- WYNAGR.
+        wynik_mc REAL NOT NULL DEFAULT 0,  -- WYNIK mc
+        wynik_narast REAL NOT NULL DEFAULT 0 -- wynik narast.
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_entries_driver_month ON entries(driver, month);
+    `);
+    console.log('Database schema initialized successfully');
+    
+    isInitialized = true;
+    return db;
   } catch (error) {
-    console.error('Failed to create database directory:', error);
+    console.error('Failed to initialize database:', error);
+    // Fallback: try to create a new database
+    try {
+      db = new Database(':memory:'); // Use in-memory database as fallback
+      console.log('Using in-memory database as fallback');
+      
+      // Initialize schema for in-memory database
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS entries (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          driver TEXT NOT NULL,
+          month TEXT NOT NULL,               -- YYYY-MM-01
+          frachty REAL NOT NULL DEFAULT 0,   -- FRACHTY-fra
+          paliwo REAL NOT NULL DEFAULT 0,    -- PALIWO
+          razem REAL NOT NULL DEFAULT 0,     -- RAZEM
+          wynagr REAL NOT NULL DEFAULT 0,    -- WYNAGR.
+          wynik_mc REAL NOT NULL DEFAULT 0,  -- WYNIK mc
+          wynik_narast REAL NOT NULL DEFAULT 0 -- wynik narast.
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_entries_driver_month ON entries(driver, month);
+      `);
+      
+      isInitialized = true;
+      return db;
+    } catch (fallbackError) {
+      console.error('Failed to create fallback database:', fallbackError);
+      throw new Error('Database initialization failed');
+    }
   }
 }
 
-// Initialize database with error handling
-let db: Database.Database;
-try {
-  db = new Database(DB_PATH);
-  console.log('Database initialized successfully');
-} catch (error) {
-  console.error('Failed to initialize database:', error);
-  // Fallback: try to create a new database
-  try {
-    db = new Database(':memory:'); // Use in-memory database as fallback
-    console.log('Using in-memory database as fallback');
-  } catch (fallbackError) {
-    console.error('Failed to create fallback database:', fallbackError);
-    throw new Error('Database initialization failed');
-  }
-}
+export { initializeDatabase as db };
 
-export { db };
-
-// Initialize database schema with error handling
-try {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS entries (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      driver TEXT NOT NULL,
-      month TEXT NOT NULL,               -- YYYY-MM-01
-      frachty REAL NOT NULL DEFAULT 0,   -- FRACHTY-fra
-      paliwo REAL NOT NULL DEFAULT 0,    -- PALIWO
-      razem REAL NOT NULL DEFAULT 0,     -- RAZEM
-      wynagr REAL NOT NULL DEFAULT 0,    -- WYNAGR.
-      wynik_mc REAL NOT NULL DEFAULT 0,  -- WYNIK mc
-      wynik_narast REAL NOT NULL DEFAULT 0 -- wynik narast.
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_entries_driver_month ON entries(driver, month);
-  `);
-  console.log('Database schema initialized successfully');
-} catch (error) {
-  console.error('Failed to initialize database schema:', error);
-}
 
 export type Entry = {
   id: number;
@@ -70,7 +112,9 @@ export type Entry = {
 
 export function listDrivers(): string[] {
   try {
-    const rows = db.prepare(`SELECT DISTINCT driver FROM entries ORDER BY driver`).all();
+    const database = initializeDatabase();
+    if (!database) return [];
+    const rows = database.prepare(`SELECT DISTINCT driver FROM entries ORDER BY driver`).all();
     return rows.map((r: any) => r.driver);
   } catch (error) {
     console.error('Error listing drivers:', error);
@@ -80,7 +124,9 @@ export function listDrivers(): string[] {
 
 export function allEntries(): Entry[] {
   try {
-    return db.prepare(`SELECT * FROM entries ORDER BY month, driver`).all() as Entry[];
+    const database = initializeDatabase();
+    if (!database) return [];
+    return database.prepare(`SELECT * FROM entries ORDER BY month, driver`).all() as Entry[];
   } catch (error) {
     console.error('Error fetching all entries:', error);
     return [];
@@ -89,7 +135,9 @@ export function allEntries(): Entry[] {
 
 export function entriesByDriver(driver: string): Entry[] {
   try {
-    return db.prepare(`SELECT * FROM entries WHERE driver = ? ORDER BY month`).all(driver) as Entry[];
+    const database = initializeDatabase();
+    if (!database) return [];
+    return database.prepare(`SELECT * FROM entries WHERE driver = ? ORDER BY month`).all(driver) as Entry[];
   } catch (error) {
     console.error('Error fetching entries for driver:', driver, error);
     return [];
@@ -99,6 +147,8 @@ export function entriesByDriver(driver: string): Entry[] {
 export function monthlyTotalsForDrivers(drivers: string[]): Entry[] {
   if (drivers.length === 0) return [];
   try {
+    const database = initializeDatabase();
+    if (!database) return [];
     const placeholders = drivers.map(() => '?').join(',');
     const sql = `
       SELECT
@@ -115,7 +165,7 @@ export function monthlyTotalsForDrivers(drivers: string[]): Entry[] {
       GROUP BY month
       ORDER BY month
     `;
-    return db.prepare(sql).all(...drivers) as Entry[];
+    return database.prepare(sql).all(...drivers) as Entry[];
   } catch (error) {
     console.error('Error calculating monthly totals:', error);
     return [];
