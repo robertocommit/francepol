@@ -4,7 +4,7 @@ import path from 'path';
 
 export async function importCsvData(db: any) {
     try {
-        const csvPath = path.resolve('full_dataset.csv');
+        const csvPath = path.resolve('/shared/volumes/a24e25/full_dataset.csv');
         
         if (!fs.existsSync(csvPath)) {
             console.log('CSV file not found, skipping import');
