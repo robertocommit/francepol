@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 import { env } from '$env/dynamic/private';
 
 const connectionString = env.DATABASE_URL || process.env.DATABASE_URL;
+console.log(connectionString);
 if (!connectionString) {
   throw new Error('DATABASE_URL is not set. Define it in your env (e.g., .env).');
 }
