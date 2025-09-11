@@ -22,7 +22,22 @@
     window.location.href = url;
   }
 
-  function fmt(n: number) { 
+  function selectAll() {
+    selected = new Set<string>(data.drivers);
+    const params = new URLSearchParams();
+    [...selected].forEach((s) => params.append('driver', s));
+    const qs = params.toString();
+    const url = qs ? `/?${qs}` : '/';
+    window.location.href = url;
+  }
+
+  function clearAll() {
+    selected = new Set<string>();
+    window.location.href = '/';
+  }
+
+  function fmt(n: number | null | undefined) { 
+    if (n == null || isNaN(n)) return '0.00';
     return n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); 
   }
 
@@ -66,6 +81,12 @@
             </svg>
             <span>Pełny zestaw danych</span>
           </a>
+          <a href="/admin" class="btn btn-secondary flex items-center space-x-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+            </svg>
+            <span>Admin</span>
+          </a>
         </div>
       </div>
     </div>
@@ -87,9 +108,6 @@
         <!-- Search -->
         <div class="mb-4">
           <div class="relative">
-            <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-            </svg>
             <input 
               type="text" 
               placeholder="Szukaj kierowcy..." 
@@ -97,6 +115,12 @@
               class="input-modern pl-10"
             />
           </div>
+        </div>
+
+        <!-- Bulk actions -->
+        <div class="flex items-center gap-2 mb-2">
+          <button class="btn btn-secondary" on:click={selectAll}>Zaznacz wszystkich</button>
+          <button class="btn btn-outline" on:click={clearAll}>Wyczyść</button>
         </div>
 
         <!-- Driver List -->

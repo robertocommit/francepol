@@ -15,7 +15,8 @@
   let currentPage = 1;
   let itemsPerPage = 50;
 
-  function fmt(n: number) { 
+  function fmt(n: number | null | undefined) { 
+    if (n == null || Number.isNaN(n)) return '0.00';
     return n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); 
   }
 

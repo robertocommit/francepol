@@ -7,7 +7,8 @@
     entries: { month: string; frachty: number; paliwo: number; razem: number; wynagr: number; wynik_mc: number; wynik_narast: number; }[];
   };
 
-  function fmt(n: number) { 
+  function fmt(n: number | null | undefined) { 
+    if (n == null || Number.isNaN(n)) return '0.00';
     return n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); 
   }
 
@@ -185,26 +186,32 @@
           </h3>
         </div>
         <div class="space-y-4">
-          <div class="flex justify-between items-center">
-            <span class="text-gray-600">Najlepszy miesiąc:</span>
-            <span class="font-semibold">
-              {data.entries.reduce((best, current) => 
-                current.wynik_mc > best.wynik_mc ? current : best
-              ).month}
-            </span>
-          </div>
-          <div class="flex justify-between items-center">
-            <span class="text-gray-600">Najlepszy wynik:</span>
-            <span class="font-semibold text-green-600">
-              {fmt(Math.max(...data.entries.map(e => e.wynik_mc)))}
-            </span>
-          </div>
-          <div class="flex justify-between items-center">
-            <span class="text-gray-600">Najgorszy wynik:</span>
-            <span class="font-semibold text-red-600">
-              {fmt(Math.min(...data.entries.map(e => e.wynik_mc)))}
-            </span>
-          </div>
+          {#if data.entries.length > 0}
+            <div class="flex justify-between items-center">
+              <span class="text-gray-600">Najlepszy miesiąc:</span>
+              <span class="font-semibold">
+                {data.entries.reduce((best, current) => 
+                  current.wynik_mc > best.wynik_mc ? current : best
+                ).month}
+              </span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-gray-600">Najlepszy wynik:</span>
+              <span class="font-semibold text-green-600">
+                {fmt(Math.max(...data.entries.map(e => e.wynik_mc)))}
+              </span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-gray-600">Najgorszy wynik:</span>
+              <span class="font-semibold text-red-600">
+                {fmt(Math.min(...data.entries.map(e => e.wynik_mc)))}
+              </span>
+            </div>
+          {:else}
+            <div class="text-center py-4">
+              <span class="text-gray-500 text-sm">Brak danych do analizy</span>
+            </div>
+          {/if}
         </div>
       </div>
     </div>

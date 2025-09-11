@@ -1,141 +1,5 @@
 // src/lib/db.ts
-import { browser } from '$app/environment';
-import Database from 'better-sqlite3';
-import fs from 'fs';
-import path from 'path';
-
-let db = null;
-let isInitialized = false;
-
-export async function getDb() {
-    if (browser) {
-        throw new Error('Database operations are not available in the browser');
-    }
-
-    if (!db) {
-        try {
-            console.log('Initializing FRANCEPOL database connection...');
-            
-            let dbPath;
-            
-            // Check if we're in production environment
-            const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL || process.env.RAILWAY_ENVIRONMENT;
-            
-            if (isProduction) {
-                dbPath = "/shared/volumes/a24e25/main.db";
-                // Check if the directory exists, if not create it
-                const dbDir = path.dirname(dbPath);
-                if (!fs.existsSync(dbDir)) {
-                    try {
-                        fs.mkdirSync(dbDir, { recursive: true });
-                        console.log(`Created directory: ${dbDir}`);
-                    } catch (dirError) {
-                        console.error(`Error creating directory ${dbDir}:`, dirError);
-                    }
-                }
-                
-                // Check if existing db file is corrupted or has schema issues
-                const dbFileExists = fs.existsSync(dbPath);
-                if (dbFileExists) {
-                    try {
-                        // Try to open and validate the database
-                        const testDb = new Database(dbPath);
-                        try {
-                            // Try to query the entries table to verify schema
-                            testDb.prepare('SELECT driver FROM entries LIMIT 1').get();
-                        } catch (schemaError) {
-                            console.warn('Schema validation failed, recreating database:', schemaError.message);
-                            testDb.close();
-                            fs.renameSync(dbPath, `${dbPath}.backup-${Date.now()}`);
-                            console.log('Renamed old database file to backup');
-                        }
-                        testDb.close();
-                    } catch (openError) {
-                        console.warn('Failed to open existing database, will recreate:', openError.message);
-                        try {
-                            fs.renameSync(dbPath, `${dbPath}.corrupt-${Date.now()}`);
-                            console.log('Renamed corrupted database file');
-                        } catch (renameError) {
-                            console.error('Error renaming corrupted database file:', renameError);
-                        }
-                    }
-                }
-                
-                db = new Database(dbPath);
-            } else {
-                dbPath = ".data/transport.sqlite";
-                // Ensure directory exists for development
-                const dbDir = path.dirname(dbPath);
-                if (!fs.existsSync(dbDir)) {
-                    fs.mkdirSync(dbDir, { recursive: true });
-                }
-                db = new Database(dbPath);
-            }
-
-            db.pragma('foreign_keys = ON');
-            
-            // Initialize schema
-            console.log('Setting up FRANCEPOL database schema...');
-            initializeSchema(db);
-            
-            // Import CSV data if available
-            try {
-                const { importCsvData } = await import('./import-csv');
-                console.log('Importing CSV data...');
-                await importCsvData(db);
-            } catch (error) {
-                console.error('Error importing CSV data (non-fatal):', error.message);
-            }
-            
-            // Verify entries table creation
-            try {
-                const entriesCount = db.prepare('SELECT COUNT(*) as count FROM entries').get();
-                console.log(`Entries table created successfully. Found ${entriesCount.count} entries.`);
-            } catch (error) {
-                console.error('Error verifying entries table:', error);
-            }
-            
-            isInitialized = true;
-            console.log('FRANCEPOL database initialization complete!');
-        } catch (error) {
-            console.error('Database initialization error:', error);
-            throw error;
-        }
-    }
-    return db;
-}
-
-export function closeDb() {
-    if (db) {
-        db.close();
-        db = null;
-        isInitialized = false;
-        console.log('Database connection closed');
-    }
-}
-
-export function isDbInitialized() {
-    return isInitialized;
-}
-
-function initializeSchema(database) {
-    database.exec(`
-        CREATE TABLE IF NOT EXISTS entries (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            driver TEXT NOT NULL,
-            month TEXT NOT NULL,               -- YYYY-MM-01
-            frachty REAL NOT NULL DEFAULT 0,   -- FRACHTY-fra
-            paliwo REAL NOT NULL DEFAULT 0,    -- PALIWO
-            razem REAL NOT NULL DEFAULT 0,     -- RAZEM
-            wynagr REAL NOT NULL DEFAULT 0,    -- WYNAGR.
-            wynik_mc REAL NOT NULL DEFAULT 0,  -- WYNIK mc
-            wynik_narast REAL NOT NULL DEFAULT 0 -- wynik narast.
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_entries_driver_month ON entries(driver, month);
-    `);
-}
-
+import db from '$lib/server/db';
 
 export type Entry = {
   id: number;
@@ -149,11 +13,32 @@ export type Entry = {
   wynik_narast: number;
 };
 
+// Initialize the driver_financials table if it doesn't exist
+async function ensureTable() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS driver_financials (
+      id SERIAL PRIMARY KEY,
+      driver TEXT NOT NULL,
+      month DATE NOT NULL,
+      frachty DECIMAL(10,2) NOT NULL DEFAULT 0,   -- FRACHTY-fra
+      paliwo DECIMAL(10,2) NOT NULL DEFAULT 0,    -- PALIWO
+      razem DECIMAL(10,2) NOT NULL DEFAULT 0,     -- RAZEM
+      wynagr DECIMAL(10,2) NOT NULL DEFAULT 0,    -- WYNAGR.
+      wynik_mc DECIMAL(10,2) NOT NULL DEFAULT 0,  -- WYNIK mc
+      wynik_narast DECIMAL(10,2) NOT NULL DEFAULT 0, -- wynik narast.
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(driver, month)
+    );
+    CREATE INDEX IF NOT EXISTS idx_driver_financials_driver_month ON driver_financials(driver, month);
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_driver_financials_driver_month ON driver_financials(driver, month);
+  `);
+}
+
 export async function listDrivers(): Promise<string[]> {
   try {
-    const database = await getDb();
-    const rows = database.prepare(`SELECT DISTINCT driver FROM entries ORDER BY driver`).all();
-    return rows.map((r: any) => r.driver);
+    await ensureTable();
+    const result = await db.query(`SELECT DISTINCT driver FROM driver_financials ORDER BY driver`);
+    return result.rows.map((r: any) => r.driver);
   } catch (error) {
     console.error('Error listing drivers:', error);
     return [];
@@ -162,8 +47,17 @@ export async function listDrivers(): Promise<string[]> {
 
 export async function allEntries(): Promise<Entry[]> {
   try {
-    const database = await getDb();
-    return database.prepare(`SELECT * FROM entries ORDER BY month, driver`).all() as Entry[];
+    await ensureTable();
+    const result = await db.query(`
+      SELECT 
+        id, driver, 
+        to_char(month, 'YYYY-MM-DD') as month,
+        frachty::float8, paliwo::float8, razem::float8, 
+        wynagr::float8, wynik_mc::float8, wynik_narast::float8
+      FROM driver_financials 
+      ORDER BY month, driver
+    `);
+    return result.rows as Entry[];
   } catch (error) {
     console.error('Error fetching all entries:', error);
     return [];
@@ -172,8 +66,18 @@ export async function allEntries(): Promise<Entry[]> {
 
 export async function entriesByDriver(driver: string): Promise<Entry[]> {
   try {
-    const database = await getDb();
-    return database.prepare(`SELECT * FROM entries WHERE driver = ? ORDER BY month`).all(driver) as Entry[];
+    await ensureTable();
+    const result = await db.query(`
+      SELECT 
+        id, driver, 
+        to_char(month, 'YYYY-MM-DD') as month,
+        frachty::float8, paliwo::float8, razem::float8, 
+        wynagr::float8, wynik_mc::float8, wynik_narast::float8
+      FROM driver_financials 
+      WHERE driver = $1 
+      ORDER BY month
+    `, [driver]);
+    return result.rows as Entry[];
   } catch (error) {
     console.error('Error fetching entries for driver:', driver, error);
     return [];
@@ -183,27 +87,101 @@ export async function entriesByDriver(driver: string): Promise<Entry[]> {
 export async function monthlyTotalsForDrivers(drivers: string[]): Promise<Entry[]> {
   if (drivers.length === 0) return [];
   try {
-    const database = await getDb();
-    const placeholders = drivers.map(() => '?').join(',');
-    const sql = `
+    await ensureTable();
+    const result = await db.query(`
       SELECT
+        0 as id,
         'TOTAL' as driver,
-        month,
-        SUM(frachty) as frachty,
-        SUM(paliwo)  as paliwo,
-        SUM(razem)   as razem,
-        SUM(wynagr)  as wynagr,
-        SUM(wynik_mc) as wynik_mc,
-        SUM(wynik_narast) as wynik_narast
-      FROM entries
-      WHERE driver IN (${placeholders})
+        to_char(month, 'YYYY-MM-DD') as month,
+        SUM(frachty)::float8 as frachty,
+        SUM(paliwo)::float8 as paliwo,
+        SUM(razem)::float8 as razem,
+        SUM(wynagr)::float8 as wynagr,
+        SUM(wynik_mc)::float8 as wynik_mc,
+        SUM(wynik_narast)::float8 as wynik_narast
+      FROM driver_financials
+      WHERE driver = ANY($1::text[])
       GROUP BY month
       ORDER BY month
-    `;
-    return database.prepare(sql).all(...drivers) as Entry[];
+    `, [drivers]);
+    return result.rows as Entry[];
   } catch (error) {
     console.error('Error calculating monthly totals:', error);
     return [];
+  }
+}
+
+export type UpsertEntryInput = {
+  driver: string;
+  month: string; // YYYY-MM-DD
+  frachty: number;
+  paliwo: number;
+  razem: number;
+  wynagr: number;
+  wynik_mc: number;
+  wynik_narast: number;
+};
+
+export async function upsertEntry(input: UpsertEntryInput): Promise<Entry | null> {
+  try {
+    await ensureTable();
+    const result = await db.query(
+      `INSERT INTO driver_financials
+        (driver, month, frachty, paliwo, razem, wynagr, wynik_mc, wynik_narast)
+       VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (driver, month) DO UPDATE SET
+        frachty = EXCLUDED.frachty,
+        paliwo = EXCLUDED.paliwo,
+        razem = EXCLUDED.razem,
+        wynagr = EXCLUDED.wynagr,
+        wynik_mc = EXCLUDED.wynik_mc,
+        wynik_narast = EXCLUDED.wynik_narast
+       RETURNING id, driver, to_char(month, 'YYYY-MM-DD') as month,
+         frachty::float8, paliwo::float8, razem::float8, wynagr::float8, wynik_mc::float8, wynik_narast::float8`,
+      [
+        input.driver,
+        input.month,
+        input.frachty,
+        input.paliwo,
+        input.razem,
+        input.wynagr,
+        input.wynik_mc,
+        input.wynik_narast
+      ]
+    );
+    return (result.rows[0] as Entry) ?? null;
+  } catch (error) {
+    console.error('Error upserting entry:', error);
+    return null;
+  }
+}
+
+export async function deleteEntry(driver: string, month: string): Promise<number> {
+  try {
+    await ensureTable();
+    const result = await db.query(
+      `DELETE FROM driver_financials WHERE driver = $1 AND month = $2::date`,
+      [driver, month]
+    );
+    // result.rowCount is not available in some pg configs when using pool.query typings, so coalesce
+    return (result as any).rowCount ?? 0;
+  } catch (error) {
+    console.error('Error deleting entry:', error);
+    return 0;
+  }
+}
+
+export async function deleteDriver(driver: string): Promise<number> {
+  try {
+    await ensureTable();
+    const result = await db.query(
+      `DELETE FROM driver_financials WHERE driver = $1`,
+      [driver]
+    );
+    return (result as any).rowCount ?? 0;
+  } catch (error) {
+    console.error('Error deleting driver:', error);
+    return 0;
   }
 }
 

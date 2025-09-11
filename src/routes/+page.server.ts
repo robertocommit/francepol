@@ -3,10 +3,17 @@ import type { PageServerLoad } from './$types';
 import { listDrivers, monthlyTotalsForDrivers } from '$lib/db';
 
 export const load: PageServerLoad = async ({ url }) => {
-  const selected = url.searchParams.getAll('driver');
+  const selectedDrivers = url.searchParams.getAll('driver');
+
+  // Fetch drivers list and monthly totals
   const drivers = await listDrivers();
-  const selectedDrivers = selected.length ? selected : drivers.slice(0, Math.min(5, drivers.length));
-  const totals = await monthlyTotalsForDrivers(selectedDrivers);
-  return { drivers, selectedDrivers, totals };
+  const effectiveSelection = selectedDrivers.length === 0 ? drivers : selectedDrivers;
+  const totals = await monthlyTotalsForDrivers(effectiveSelection);
+
+  return {
+    drivers,
+    selectedDrivers,
+    totals
+  };
 };
 
